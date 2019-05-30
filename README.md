@@ -19,7 +19,7 @@ I then converted the db2 module and used that instead of ibm-db-dbi, but it didn
 Now I have rewritten the file400 module, and with this the performance is at least as good as on Python 2.7.
 
 You will have to install an ile service program called reclevacc and a python c extention module named file400.so  
-Download the zip files file400.zo.zip and reclevacc.savf.zip  
+Download the zip files file400.so.zip and reclevacc.savf.zip  
 Unpack the zip files on your pc.  
 Transfer file400.so to site-packages (/QOpenSys/pkgs/lib/python3.6/site-packages)  
 Create a lib called python3  
