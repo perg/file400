@@ -1,7 +1,8 @@
 # file400
 
-IBM i record level access for Python 3 
+IBM i record level access for Python 3. (beta)
 
+## Why I created this Python module
 Today we use iseries Python 2.7, and we have a lot of python modules that access the database using the file400 module.
 
 We are in the process of converting to Python 3.6 pase for i.
@@ -14,12 +15,13 @@ There is no performance problems with this file400 layer on the Ubuntu box.
 
 I decided to use this same layer on top of ibm-db-dbi on the IBM i, but the performance hit was to big.
 
-I then converted the db2 module and used that instead of ibm-db-dbi, but it didn't make big difference.
+I then converted the \_db2 module from iseries Python 2.7 and used that instead of ibm-db-dbi, but it didn't make big difference.
 
 Now I have rewritten the file400 module, and with this the performance is at least as good as on Python 2.7.
 
+## Installation
 You will have to install an ile service program called reclevacc and a python c extention module named file400.so  
-Download the zip files file400.so.zip and reclevacc.savf.zip  
+Download file400.so.zip and reclevacc.savf.zip  
 Unpack the zip files on your pc.  
 Transfer file400.so to site-packages (/QOpenSys/pkgs/lib/python3.6/site-packages)  
 Create a lib called python3  
@@ -27,24 +29,24 @@ Transfer reclevacc.savf to python3 (/QSYS\.LIB/PYTHON3.LIB)
 Run RSTOBJ OBJ(RECLEVACC) SAVLIB(PYTHON3) DEV(\*SAVF) SAVF(PYTHON3/RECLEVACC)  
   
 Use it as in python2.7 (a few of the functions has been removed)  
-
+```
 from file400 import File400  
 f = File400('myfile', 'r')  
 f.posb((first_key, second_key))  
 while f.readne():  
-  print(f._first1)  
-
+    print(f._first1)  
+```
 
 The db2 module is also available, though it's probably better to use ibm-db-dbi.  
 Install as with file400  
 Example on how to use it.  
-  
-import \_db2 as db2  
+```  
+import _db2 as db2  
 con = db2.connect(servermode=False, autocommit=True, sysnaming=True)  
 for row in con.execute("select col1, col2 from myfile"):  
     col1, col2 = row  
     print(col1, col2)  
-
+```
   
 ## In case you would like to do the compilation your self.
 \_db2.c  
