@@ -2604,6 +2604,8 @@ file400_initFile(File400Object *f)
     }
     // allocate storage for record
     f->recbuf = PyMem_Malloc(f->fi.recLen + 1);
+    // clear the record
+    f_clear(f, f->recbuf);
     /* return ok */
     return 0;
 }
