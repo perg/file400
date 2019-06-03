@@ -1288,8 +1288,7 @@ static int
 f_initialize(File400Object *self)
 {
     if (self->fieldArr == NULL) {
-        if (file400_initFile(self)) {
-            PyErr_SetString(file400Error, "Error getting file information.");
+        if (file400_initFile(self) < 0) {
             return 0;
         }
     }
@@ -1301,8 +1300,7 @@ static int
 f_isOpen(File400Object *self)
 {
     if (self->fieldArr == NULL) {
-        if (file400_initFile(self)) {
-            PyErr_SetString(file400Error, "Error getting file information.");
+        if (file400_initFile(self) < 0) {
             return 0;
         }
     }
@@ -1389,7 +1387,6 @@ File400_open(File400Object *self, PyObject *args)
         return NULL;
     if (!self->recbuf) {
         if (file400_initFile(self) < 0) {
-            PyErr_SetString(file400Error, "Error initializing file.");
             return NULL;
         }
     }

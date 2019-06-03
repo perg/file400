@@ -43,7 +43,7 @@
 #define OPEN_READ 10
 #define OPEN_UPDATE 12
 #define OPEN_WRITE 14
-#define _FILE_MAX 1024
+#define _FILE_MAX 2048
 /* Field information structure */
 typedef struct {
 	char name[11];
@@ -97,7 +97,7 @@ typedef struct {
     _RFILE    *fp;
 } FileHead;
 
-static FileHead *fileArr[512] = {NULL};
+static FileHead *fileArr[_FILE_MAX] = {NULL};
 /* hold utf conversion descriptors */
 static int utfInit = 0;
 static iconv_t cdToUtf;
