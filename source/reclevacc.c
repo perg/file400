@@ -324,7 +324,7 @@ int fileInit(int fileno) {
     foHd = (Qdb_Qddfmt_t *) fibuff;
     if (foHd->Qddbyava > fibuffsize) {
         fibuffsize = foHd->Qddbyava;
-        realloc(fibuff, fibuffsize);
+        fibuff = realloc(fibuff, fibuffsize);
 #pragma convert(37)
         QDBRTVFD(fibuff, fibuffsize, retFileLib, "FILD0200", fileLib,
                  "          ", "0", "*LCL      ", "*EXT      ", &error);
@@ -376,7 +376,7 @@ int fileInit(int fileno) {
     if (error.Bytes_Available == 0) {
         kyHd = (Qdb_Qdbwh_t *) kibuff;
         if (kyHd->Byte_Avail > 1024) {
-            realloc(kibuff, kyHd->Byte_Avail);
+            kibuff = realloc(kibuff, kyHd->Byte_Avail);
             kyHd = (Qdb_Qdbwh_t *) kibuff;
     #pragma convert(37)
             QDBRTVFD(kibuff, kyHd->Byte_Avail, retFileLib, "FILD0300", fileLib,

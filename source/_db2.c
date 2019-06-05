@@ -406,27 +406,6 @@ curdesc_fields(CursordescObject *curdesc)
     }
 }
 
-/* internal routine to get field position */
-static int
-curdesc_getFieldPos(CursordescObject *curdesc, PyObject *field)
-{
-    PyObject *posO;
-    int i = -1;
-
-    Py_INCREF(field);
-    if (PyLong_Check(field)) {
-        i = PyLong_AS_LONG(field);
-        if (i >= curdesc->numCols)
-            i = -1;
-    } else if (PyUnicode_Check(field)) {
-        posO = PyDict_GetItem(curdesc->fieldDict, field);
-        if (posO != NULL)
-            i = PyLong_AS_LONG(posO);
-    }
-    Py_DECREF(field);
-    return i;
-}
-
 char con_close_doc[] =
 "close() -> Close connection\n\
 \n\
@@ -1138,38 +1117,6 @@ cvtToPy(unsigned char *buf, fieldInfoStruct fi, int i)
     }
 }
 
-static PyObject *
-row_subscript(RowObject *self, PyObject *v)
-{
-    int pos;
-    pos = curdesc_getFieldPos(self->curdesc, v);
-    if (pos < 0) {
-        PyErr_SetString(dbError, "Parameter not valid.");
-        return NULL;
-    } else
-        return cvtToPy(self->buffer, self->curdesc->fieldArr[pos], pos);
-}
-
-static PyObject *
-row_getattro(RowObject *self, PyObject *field)
-{
-    PyObject *f1, *res;
-    int chr;
-    if (PyUnicode_Check(field)) {
-        PyUnicode_READY(field);
-        if (PyUnicode_GET_LENGTH(field) > 0) {
-            chr = PyUnicode_READ_CHAR(field, 0);
-            if (chr == '_') {
-                f1 = PyUnicode_Substring(field, 1, PyUnicode_GET_LENGTH(field));
-                res = row_subscript(self, f1);
-                Py_DECREF(f1);
-                return res;
-            }
-        }
-    }
-    return PyObject_GenericGetAttr((PyObject *)self, field);
-}
-
 static int
 row_length(RowObject *self)
 {
@@ -1207,6 +1154,55 @@ row_slice(RowObject *self, int ilow, int ihigh)
 		PyTuple_SET_ITEM(t, i - ilow, v);
 	}
 	return t;
+}
+
+static PyObject *
+row_subscript(RowObject *self, PyObject *v)
+{
+    PyObject *posO;
+    int pos;
+
+    if (PyLong_Check(v)) {
+        pos = PyLong_AS_LONG(v);
+        return row_item(self, pos);
+    } else if (PySlice_Check(v)) {
+        Py_ssize_t start, stop, step, length;
+        if (PySlice_GetIndicesEx(v, self->curdesc->numCols, &start, &stop, &step, &length) < 0) {
+            PyErr_SetString(dbError, "Error gettting slice.");
+            return NULL;
+        }
+        return row_slice(self, start, stop);
+    } else if (PyUnicode_Check(v)) {
+        posO = PyDict_GetItem(self->curdesc->fieldDict, v);
+        if (posO != NULL) {
+            pos = PyLong_AS_LONG(posO);
+            if (pos >= 0) {
+                return cvtToPy(self->buffer, self->curdesc->fieldArr[pos], pos);
+            }
+        }
+    }
+    PyErr_SetString(dbError, "Parameter not valid.");
+    return NULL;
+}
+
+static PyObject *
+row_getattro(RowObject *self, PyObject *field)
+{
+    PyObject *f1, *res;
+    int chr;
+    if (PyUnicode_Check(field)) {
+        PyUnicode_READY(field);
+        if (PyUnicode_GET_LENGTH(field) > 0) {
+            chr = PyUnicode_READ_CHAR(field, 0);
+            if (chr == '_') {
+                f1 = PyUnicode_Substring(field, 1, PyUnicode_GET_LENGTH(field));
+                res = row_subscript(self, f1);
+                Py_DECREF(f1);
+                return res;
+            }
+        }
+    }
+    return PyObject_GenericGetAttr((PyObject *)self, field);
 }
 
 static char row_get_doc[] =
