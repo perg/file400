@@ -1317,8 +1317,8 @@ f_keylen(File400Object *self, PyObject *key, char *keyval)
     if (keyval == NULL && PyLong_Check(key)) {
         /* find key length */
         keyCnt = PyLong_AS_LONG(key);
-        if (keyCnt > self->fi.keyCount) {
-            PyErr_SetString(file400Error, "Too many key fields.");
+        if (keyCnt < 0 || keyCnt > self->fi.keyCount) {
+            PyErr_SetString(file400Error, "Number of key fields not valid.");
             return -1;
         }
         keyLen = 0;
@@ -1635,12 +1635,22 @@ Lock (for mode 'r+'). 1 - lock(default) 0 - no lock.";
 static PyObject *
 File400_readne(File400Object *self, PyObject *args)
 {
-    int result, keyLen = -1, lock = -1;
+    int result, keyLen = 0, lock = -1;
+    PyObject *key = Py_None;
 
-    if (!PyArg_ParseTuple(args, "|ii:readne", &keyLen, &lock))
+    if (!PyArg_ParseTuple(args, "|Oi:readne", &key, &lock))
         return NULL;
     if (!f_isOpen(self))
         return NULL;
+    if (key != Py_None) {
+        if (!PyLong_Check(key)) {
+            PyErr_SetString(file400Error, "readne Key must be a number of key fields.");
+            return NULL;
+        }
+        keyLen = f_keylen(self, key, NULL);
+        if (keyLen == -1)
+            return NULL;
+    }
     result = call_fileReadne(self->fileno, self->recbuf, keyLen, lock);
     if (result == -1) {
         PyErr_SetString(file400Error, "readne failed.");
@@ -1661,12 +1671,22 @@ Lock (for mode 'r+'). 1 - lock(default) 0 - no lock.";
 static PyObject *
 File400_readpe(File400Object *self, PyObject *args)
 {
-    int result, keyLen = -1, lock = -1;
+    int result, keyLen = 0, lock = -1;
+    PyObject *key = Py_None;
 
-    if (!PyArg_ParseTuple(args, "|ii:readpe", &keyLen, &lock))
+    if (!PyArg_ParseTuple(args, "|Oi:readpe", &key, &lock))
         return NULL;
     if (!f_isOpen(self))
         return NULL;
+    if (key != Py_None) {
+        if (!PyLong_Check(key)) {
+            PyErr_SetString(file400Error, "readne Key must be a number of key fields.");
+            return NULL;
+        }
+        keyLen = f_keylen(self, key, NULL);
+        if (keyLen == -1)
+            return NULL;
+    }
     result = call_fileReadpe(self->fileno, self->recbuf, keyLen, lock);
     if (result == -1) {
         PyErr_SetString(file400Error, "readpe failed.");
