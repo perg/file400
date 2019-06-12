@@ -2,16 +2,15 @@
 
 IBM i record level access for Python 3. (beta)
 
-## Why I created this Python module
-Today we use iseries Python 2.7, and we have a lot of python modules that access the database using the file400 module.
+## Background
+We have a lot of python modules written for iseries python 2.7 that uses the file400 module.
 
-We are in the process of converting to Python 3.6 pase for i.
-The biggest concern was the database access, and the only option was the ibm-db-dbi module.
+When I planned to migrate to Python 3.6 pase for i, my biggest concern was the database access, and the only option was the ibm-db-dbi module.
 
 We have an Ubuntu box with postgres, that runs the same python programs.  
-It has a layer on top of psycopg2 that emulates file400. 
+It has a layer on top of psycopg2 that emulates file400.  
 Db2 database changes is copied to the Ubuntu postgres database using journals, and when the IBM i is unavailable during full backup a few hours every week, this Ubunto box takes over.
-There is no performance problems with this file400 layer on the Ubuntu box. 
+This has been running for several years without any performance problems with the file400 layer on the Ubuntu box. 
 
 I decided to use this same layer on top of ibm-db-dbi on the IBM i, but the performance hit was to big.
 
