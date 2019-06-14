@@ -705,7 +705,7 @@ int fileReadeq(int fileno, char *recbuf, char *key, int keyLen, int lock) {
             _Rrlslck(fh->fp);
     }
     fi->lmode = lock;
-    if (f_setKey(fh, key, fi->keyLen) < 0)
+    if (f_setKey(fh, key, keyLen) < 0)
         return -1;
     errno = 0;
     keyOpt = (lockOpt == __DFT) ? __KEY_EQ : __KEY_EQ | lockOpt;
