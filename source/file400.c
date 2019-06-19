@@ -1090,8 +1090,17 @@ f_cvtFromPy(char *fb, fieldInfoStruct *field, PyObject *o)
                     }
                 } else
                     dsh = 0;
-                if (dsh < len)
-                    memset(p + dsh, 0x40, len - dsh);
+                if (dsh < len) {
+                    if (field->ccsid == 1208 || field->ccsid == 819) {
+                        memset(p + dsh, 0x20, len - dsh);
+                    } else if (field->ccsid < 100 || (field->ccsid > 250 && field->ccsid < 367) ||
+                             (field->ccsid >= 1140 && field->ccsid <= 1150) || field->ccsid == 65535) {
+                        memset(p + dsh, 0x40, len - dsh);
+                    } else {
+                        PyErr_SetString(file400Error, "not supported ccsid.");
+                        return -1;
+                    }
+                }
             }
             break;
         }
