@@ -165,6 +165,8 @@ ILEpointer *fileDeleteTarget = NULL;
 static char fileDeleteTarget_buf[sizeof(ILEpointer) + 15];
 ILEpointer *fileGetRrnTarget = NULL;
 static char fileGetRrnTarget_buf[sizeof(ILEpointer) + 15];
+ILEpointer *osSystemTarget = NULL;
+static char osSystemTarget_buf[sizeof(ILEpointer) + 15];
 
 static ILEpointer * loadFunction(char *buf, char *name) {
     ILEpointer *target = (ILEpointer*)ROUND_QUAD(buf);
@@ -215,6 +217,7 @@ static void loadSrvpgm() {
     fileUpdateTarget = loadFunction(fileUpdateTarget_buf, "fileUpdate");
     fileDeleteTarget = loadFunction(fileDeleteTarget_buf, "fileDelete");
     fileGetRrnTarget = loadFunction(fileGetRrnTarget_buf, "fileGetRrn");
+    osSystemTarget = loadFunction(osSystemTarget_buf, "osSystem");
 }
 
 typedef struct
@@ -282,6 +285,12 @@ typedef struct
  fileBuf_St;
 static arg_type_t
  fileBuf_Sign[] = { ARG_INT32, ARG_MEMPTR, ARG_END };
+
+typedef struct
+ { ILEarglist_base base; ILEpointer cmd; }
+ osSystem_St;
+static arg_type_t
+ osSystem_Sign[] = { ARG_MEMPTR, ARG_END };
 
 static int call_int2zoned(char *buf, int len, int dec, int value)
 {
@@ -645,6 +654,17 @@ static int call_fileGetRrn(int fileno)
     _ILECALL(fileGetRrnTarget, &ILEarglist->base, file_Sign, result_type);
     return ILEarglist->base.result.s_int32.r_int32;
 }
+
+static int call_osSystem(char *cmd)
+{
+    char ILEarglist_buf[sizeof(osSystem_St) + 15];
+    if (!actmark) loadSrvpgm();
+    osSystem_St *ILEarglist = (osSystem_St*)ROUND_QUAD(ILEarglist_buf);
+    ILEarglist->cmd.s.addr = (ulong)cmd;
+    _ILECALL(osSystemTarget, &ILEarglist->base, osSystem_Sign, result_type);
+    return ILEarglist->base.result.s_int32.r_int32;
+}
+
 static int
 file400_initFile(File400Object *f);
 
@@ -2739,6 +2759,17 @@ setFieldtype(PyObject* self, PyObject* args)
     return Py_None;
 }
 
+static PyObject *
+run_system(File400Object *self, PyObject *args)
+{
+    int result;
+    char *cmd;
+    if (!PyArg_ParseTuple(args, "s:system", &cmd))
+        return NULL;
+    result = call_osSystem(cmd);
+    return PyLong_FromLong(result);
+}
+
 PyTypeObject File400_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "File400",
@@ -2758,6 +2789,7 @@ PyTypeObject File400_Type = {
 /* List of functions defined in the module */
 static PyMethodDef file400_memberlist[] = {
     {"setFieldtypeFunction", (PyCFunction)setFieldtype, METH_VARARGS, "Set factory function for field types."},
+    {"system", (PyCFunction)run_system, METH_VARARGS, "Run command."},
     {NULL}
 };
 

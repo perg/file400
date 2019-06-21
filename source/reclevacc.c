@@ -913,3 +913,7 @@ int fileGetRrn(int fileno) {
     fh = fileArr[fileno];
     return fh->fp->riofb.rrn;
 }
+
+int osSystem(char *cmd) {
+    return system(cmd);
+}
