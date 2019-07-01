@@ -1085,7 +1085,7 @@ cvtToPy(unsigned char *buf, fieldInfoStruct fi, int i)
             if (fi.type == SQL_VARCHAR) size = strlen(p);
             else size = fi.size - 1;
         }
-        while (size > 0 && isspace(Py_CHARMASK(p[size - 1])))
+        while (size > 0 && p[size - 1] == 0x20)
             size--;
         if (fi.type == SQL_NUMERIC || fi.type == SQL_DECIMAL) {
             return PyObject_CallFunction(decimalcls, "s", p);
