@@ -896,7 +896,7 @@ f_cvtToPy(char * fb, fieldInfoStruct *field)
     short dsh, varlen;
     char buf[100], *ss;
     char *p;
-    long dl;
+    int dl;
     int len;
     long long dll;
     float dfl;
@@ -999,7 +999,7 @@ static int
 f_cvtFromPy(char *fb, fieldInfoStruct *field, PyObject *o)
 {
     short dsh;
-    long dlo;
+    int dlo;
     long long dll;
     float dfl;
     double ddbl;
