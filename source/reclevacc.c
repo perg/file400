@@ -401,6 +401,8 @@ int fileInit(int fileno) {
                 keyInfo->len = kyKey->Field_Len;
                 keyInfo->digits = kyKey->Num_Of_Digs;
                 keyInfo->dec = kyKey->Dec_Pos;
+                // Use dft to set if descending key or not;
+                keyInfo->dft = ((1 << 7) & ((char *)kyKey)[28]) ? 1: 0;
                 /* get info from fieldArr */
                 for (i = 0; i < fi->fieldCount; i++) {
                     fieldInfo = &fi->fieldArr[i];

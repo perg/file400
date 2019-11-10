@@ -2321,7 +2321,7 @@ File400_keyCount(File400Object *self, PyObject *args)
 }
 
 static char keyList_doc[] =
-"f.keyList() -> Tuple.\n\
+"f.keyList([full=0]) -> Tuple.\n\
 \n\
 Get a list(tuple) of key field names.";
 
@@ -2329,9 +2329,9 @@ static PyObject *
 File400_keyList(File400Object *self, PyObject *args)
 {
     PyObject *key;
-    int i;
+    int i, full = 0;
 
-    if (!PyArg_ParseTuple(args, ":keyList"))
+    if (!PyArg_ParseTuple(args, "|i:keyList", &full))
         return NULL;
     if (!f_initialize(self))
         return NULL;
@@ -2339,7 +2339,10 @@ File400_keyList(File400Object *self, PyObject *args)
     if (!key)
         return NULL;
     for (i = 0; i < self->fi.keyCount; i++) {
-        PyTuple_SetItem(key, i, PyUnicode_FromString(self->keyArr[i].name));
+        if (full) {
+            PyTuple_SetItem(key, i, Py_BuildValue("sn", self->keyArr[i].name, self->keyArr[i].dft));
+        } else
+            PyTuple_SetItem(key, i, PyUnicode_FromString(self->keyArr[i].name));
     }
     return key;
 }
