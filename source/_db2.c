@@ -134,7 +134,7 @@ extern PyTypeObject Cursor_Type;
 #define PyClass_Check(obj) PyObject_IsInstance(obj, (PyObject *)&PyType_Type)
 
 static PyObject *
-f_error(SQLSMALLINT htype, SQLINTEGER handle) {
+f_getdberror(SQLSMALLINT htype, SQLINTEGER handle) {
     SQLINTEGER  errorcode;
     SQLCHAR     state[5];
     SQLCHAR     msg[STR_LEN];
@@ -150,7 +150,12 @@ f_error(SQLSMALLINT htype, SQLINTEGER handle) {
     } else {
         strcpy(errorstr, "No error information found.");
     }
-    PyErr_SetString(dbError, errorstr);
+    return PyUnicode_FromString(errorstr);
+}
+
+static PyObject *
+f_error(SQLSMALLINT htype, SQLINTEGER handle) {
+    PyErr_SetString(dbError, PyUnicode_AsUTF8(f_getdberror(htype, handle)));
     return NULL;
 }
 
@@ -666,6 +671,43 @@ cur_unbind(CursorObject *self)
         self->curdesc = NULL;
         self->row = NULL;
         SQLFreeStmt(self->hstmt, SQL_UNBIND);
+    }
+}
+
+char cur_validate_doc[] =
+"validate(string) -> Errors.\n\
+\n\
+Validate the sql statement";
+
+static PyObject *
+cur_validate(PyObject *self, PyObject *args)
+{
+    CursorObject *c = (CursorObject *)self;
+    PyObject *errorstr = NULL, *stmt;
+    SQLRETURN rc;
+    if (!PyArg_ParseTuple(args, "U:validate", &stmt))
+        return NULL;
+    if (!c->hstmt) {
+        PyErr_SetString(dbError, "Cursor is closed.");
+        return NULL;
+    }
+    rc = SQLFreeStmt(c->hstmt, SQL_CLOSE);
+    /* check if identical statement */
+    cur_unbind(c);
+    Py_XDECREF(c->stmt);
+    c->stmt = stmt;
+    Py_INCREF(c->stmt);
+    /* prepare */
+    Py_BEGIN_ALLOW_THREADS
+    rc = SQLPrepare(c->hstmt, PyUnicode_AsUTF8(stmt), SQL_NTS);
+    Py_END_ALLOW_THREADS
+    if (rc != SQL_SUCCESS) {
+        errorstr = f_getdberror(SQL_HANDLE_STMT, c->hstmt);
+        SQLFreeStmt(c->hstmt, SQL_CLOSE);
+        return errorstr;
+    } else {
+        SQLFreeStmt(c->hstmt, SQL_CLOSE);
+        return PyUnicode_FromString("");
     }
 }
 
@@ -1415,6 +1457,7 @@ static PyMethodDef cursor_methods[] = {
     {"fieldDescription", (PyCFunction)cur_description, METH_NOARGS, cur_description_doc},
     {"fieldList", (PyCFunction)cur_fields, METH_NOARGS, cur_fields_doc},
     {"nextset", (PyCFunction)cur_nextset, METH_NOARGS, cur_nextset_doc},
+    {"validate", (PyCFunction)cur_validate, METH_VARARGS, cur_validate_doc},
     {"__exit__", (PyCFunction)cur_exit, METH_VARARGS, cur_exit_doc},
     {"__enter__", (PyCFunction)cur_enter, METH_NOARGS, cur_enter_doc},
     {NULL}  /* sentinel */
