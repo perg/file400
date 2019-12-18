@@ -32,6 +32,7 @@
 #include "Python.h"
 #include "structmember.h"
 #include <sqlcli.h>
+#include <string.h>
 #define STR_LEN 255
 
 #define USE_DECIMAL 0
@@ -41,8 +42,6 @@
 #define OBJ 1
 #define DICT 2
 
-/* Cursor counter */
-static int cursor_count = 0;
 /* Error Objects */
 static PyObject *dbError;
 static PyObject *dbWarning;
@@ -285,22 +284,21 @@ static PyObject *
 con_cursor(PyObject *self)
 {
     CursorObject *cursor;
-    PyObject *name;
     cursor = PyObject_New(CursorObject, &Cursor_Type);
     if (cursor != NULL) {
         ConnectionObject *c = (ConnectionObject *)self;
         SQLHSTMT hstmt;
         SQLRETURN rc;
-        if (!c->hdbc) {
+        SQLSMALLINT clength;
+        char name[19];
+       if (!c->hdbc) {
             PyErr_SetString(dbError, "Connection is closed.");
             return NULL;
         }
         rc = SQLAllocStmt(c->hdbc, &hstmt);
         if (rc != SQL_SUCCESS)
             return f_error(SQL_HANDLE_DBC, c->hdbc);
-        cursor_count += 1;
-        name = PyUnicode_FromFormat("stmt%d", cursor_count);
-        rc = SQLSetCursorName(hstmt, PyUnicode_AsUTF8(name), PyUnicode_GetLength(name));
+        rc = SQLGetCursorName(hstmt, name, 19, &clength);
         if (rc != SQL_SUCCESS)
             return f_error(SQL_HANDLE_DBC, c->hdbc);
         cursor->con = self;
@@ -309,7 +307,7 @@ con_cursor(PyObject *self)
         cursor->stmt = NULL;
         cursor->curdesc = NULL;
         cursor->paraminfo = NULL;
-        cursor->name = name;
+        cursor->name = PyUnicode_FromString(name);
         cursor->arraysize = 10;
         cursor->rowcount = 0;
         cursor->numCols = 0;
@@ -682,6 +680,8 @@ cur_execute(PyObject *self, PyObject *args)
     CursorObject *c = (CursorObject *)self;
     PyObject *params = NULL, *iobj, *stmt;
     SQLRETURN rc;
+    char *stmtlc;
+    int attr;
     int i;
     if (!PyArg_ParseTuple(args, "U|O:execute", &stmt, &params))
         return NULL;
@@ -701,6 +701,17 @@ cur_execute(PyObject *self, PyObject *args)
         Py_XDECREF(c->stmt);
         c->stmt = stmt;
         Py_INCREF(c->stmt);
+        /* If for update */
+        stmtlc = PyMem_Malloc(strlen(PyUnicode_AsUTF8(stmt)) + 1);
+        strcpy(stmtlc, PyUnicode_AsUTF8(stmt));
+        for(int i = 0; stmtlc[i]; i++){
+            stmtlc[i] = tolower(stmtlc[i]);
+        }
+        if (strstr(stmtlc, " for update")) {
+            rc = SQLSetStmtAttr(c->hstmt, SQL_ATTR_FOR_FETCH_ONLY, &attr, 0);
+        }
+        rc = SQLSetStmtAttr(c->hstmt, SQL_ATTR_FOR_FETCH_ONLY, &attr, 0);
+        PyMem_Free(stmtlc);
         /* prepare */
         Py_BEGIN_ALLOW_THREADS
         rc = SQLPrepare(c->hstmt, PyUnicode_AsUTF8(stmt), SQL_NTS);
