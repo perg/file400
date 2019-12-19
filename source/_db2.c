@@ -118,6 +118,7 @@ typedef struct {
     SQLINTEGER rowcount;
     SQLSMALLINT numCols;
     SQLSMALLINT numParams;
+    int forupdate;
 	RowObject    *row;
     PyObject *buflist;
 } CursorObject;
@@ -744,15 +745,17 @@ cur_execute(PyObject *self, PyObject *args)
         c->stmt = stmt;
         Py_INCREF(c->stmt);
         /* If for update */
+        c->forupdate = 0;
         stmtlc = PyMem_Malloc(strlen(PyUnicode_AsUTF8(stmt)) + 1);
         strcpy(stmtlc, PyUnicode_AsUTF8(stmt));
         for(int i = 0; stmtlc[i]; i++){
             stmtlc[i] = tolower(stmtlc[i]);
         }
         if (strstr(stmtlc, " for update")) {
+            c->forupdate = 1;
+            attr = SQL_FALSE;
             rc = SQLSetStmtAttr(c->hstmt, SQL_ATTR_FOR_FETCH_ONLY, &attr, 0);
         }
-        rc = SQLSetStmtAttr(c->hstmt, SQL_ATTR_FOR_FETCH_ONLY, &attr, 0);
         PyMem_Free(stmtlc);
         /* prepare */
         Py_BEGIN_ALLOW_THREADS
@@ -1075,22 +1078,30 @@ cursor_next(PyObject *self)
 {
     PyObject *row;
     CursorObject *c = (CursorObject *)self;
-    if (c->buflist == NULL) {
-        PyObject *parm, *res;
-        parm = PyTuple_New(0);
-        res = cur_fetchmany(self, parm);
-        Py_DECREF(parm);
-        if (res == Py_None || PyList_Size(res) == 0) {
+    if (c->forupdate == 1) {
+        row = cur_fetchone(self);
+        if (row == Py_None) {
             PyErr_SetObject(PyExc_StopIteration, Py_None);
             return NULL;
         }
-        PyObject_CallMethod(res, "reverse", NULL);
-        c->buflist = res;
-    }
-    row = PyObject_CallMethod(c->buflist, "pop", NULL);
-    if (PyList_Size(c->buflist) == 0) {
-        Py_DECREF(c->buflist);
-        c->buflist = NULL;
+    } else {
+        if (c->buflist == NULL) {
+            PyObject *parm, *res;
+            parm = PyTuple_New(0);
+            res = cur_fetchmany(self, parm);
+            Py_DECREF(parm);
+            if (res == Py_None || PyList_Size(res) == 0) {
+                PyErr_SetObject(PyExc_StopIteration, Py_None);
+                return NULL;
+            }
+            PyObject_CallMethod(res, "reverse", NULL);
+            c->buflist = res;
+        }
+        row = PyObject_CallMethod(c->buflist, "pop", NULL);
+        if (PyList_Size(c->buflist) == 0) {
+            Py_DECREF(c->buflist);
+            c->buflist = NULL;
+        }
     }
     return row;
 }
