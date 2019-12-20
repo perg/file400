@@ -118,7 +118,7 @@ typedef struct {
     SQLINTEGER rowcount;
     SQLSMALLINT numCols;
     SQLSMALLINT numParams;
-    int forupdate;
+    int curtype;
 	RowObject    *row;
     PyObject *buflist;
 } CursorObject;
@@ -284,11 +284,15 @@ connection_init(PyObject *self, PyObject *args, PyObject *keywds)
 char con_cursor_doc[] =
 "cursor() -> Cursor object\n\
 \n\
-Creates a new Cursor object.";
+Creates a new Cursor object. Set an optional sql statement";
 
 static PyObject *
-con_cursor(PyObject *self)
+con_cursor(PyObject *self, PyObject *args)
 {
+    PyObject *stmt = NULL;
+
+    if (!PyArg_ParseTuple(args, "|U:cursor", &stmt))
+        return NULL;
     CursorObject *cursor;
     cursor = PyObject_New(CursorObject, &Cursor_Type);
     if (cursor != NULL) {
@@ -297,7 +301,7 @@ con_cursor(PyObject *self)
         SQLRETURN rc;
         SQLSMALLINT clength;
         char name[19];
-       if (!c->hdbc) {
+        if (!c->hdbc) {
             PyErr_SetString(dbError, "Connection is closed.");
             return NULL;
         }
@@ -310,7 +314,9 @@ con_cursor(PyObject *self)
         cursor->con = self;
         Py_INCREF(self);
         cursor->hstmt = hstmt;
-        cursor->stmt = NULL;
+        cursor->stmt = stmt;
+        if (cursor->stmt)
+            Py_INCREF(cursor->stmt);
         cursor->curdesc = NULL;
         cursor->paraminfo = NULL;
         cursor->name = PyUnicode_FromString(name);
@@ -318,6 +324,7 @@ con_cursor(PyObject *self)
         cursor->rowcount = 0;
         cursor->numCols = 0;
         cursor->numParams = 0;
+        cursor->curtype = 0;
         cursor->row = NULL;
         cursor->buflist = NULL;
     }
@@ -718,15 +725,16 @@ char cur_execute_doc[] =
 Execute sql statement. Parameters should be a tuple or list.";
 
 static PyObject *
-cur_execute(PyObject *self, PyObject *args)
+cur_execute(PyObject *self, PyObject *args, PyObject *kwds)
 {
     CursorObject *c = (CursorObject *)self;
-    PyObject *params = NULL, *iobj, *stmt;
+    static char *kwlist[] = {"stmt", "params", NULL};
+    PyObject *params = NULL, *iobj, *stmt = NULL;
     SQLRETURN rc;
     char *stmtlc;
     int attr;
     int i;
-    if (!PyArg_ParseTuple(args, "U|O:execute", &stmt, &params))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|UO:execute", kwlist, &stmt, &params))
         return NULL;
     if (params && params != Py_None && (!PyTuple_Check(params) && !PyList_Check(params))) {
         PyErr_SetString(dbError, "Parameters must be a tuple or list.");
@@ -736,30 +744,41 @@ cur_execute(PyObject *self, PyObject *args)
         PyErr_SetString(dbError, "Cursor is closed.");
         return NULL;
     }
-    rc = SQLFreeStmt(c->hstmt, SQL_CLOSE);
+    if (stmt && PyUnicode_GET_LENGTH(stmt) == 0) {
+        stmt = NULL;
+    }
+    if (!stmt && !c->stmt) {
+        PyErr_SetString(dbError, "Cursor has no statement.");
+        return NULL;
+    }
     /* check if identical statement */
-    if (!c->stmt || PyUnicode_Compare(c->stmt, stmt) != 0)
-    {
-        cur_unbind(c);
+    if (stmt && (!c->stmt || PyUnicode_Compare(c->stmt, stmt) != 0)) {
         Py_XDECREF(c->stmt);
         c->stmt = stmt;
         Py_INCREF(c->stmt);
-        /* If for update */
-        c->forupdate = 0;
-        stmtlc = PyMem_Malloc(strlen(PyUnicode_AsUTF8(stmt)) + 1);
-        strcpy(stmtlc, PyUnicode_AsUTF8(stmt));
+        c->curtype = 0;
+    }
+    rc = SQLFreeStmt(c->hstmt, SQL_CLOSE);
+    if (c->curtype == 0)
+    {
+        cur_unbind(c);
+        /* Check cursor type (read or update)*/
+        stmtlc = PyMem_Malloc(strlen(PyUnicode_AsUTF8(c->stmt)) + 1);
+        strcpy(stmtlc, PyUnicode_AsUTF8(c->stmt));
         for(int i = 0; stmtlc[i]; i++){
             stmtlc[i] = tolower(stmtlc[i]);
         }
         if (strstr(stmtlc, " for update")) {
-            c->forupdate = 1;
+            c->curtype = 2;
             attr = SQL_FALSE;
             rc = SQLSetStmtAttr(c->hstmt, SQL_ATTR_FOR_FETCH_ONLY, &attr, 0);
+        } else {
+            c->curtype = 1;
         }
         PyMem_Free(stmtlc);
         /* prepare */
         Py_BEGIN_ALLOW_THREADS
-        rc = SQLPrepare(c->hstmt, PyUnicode_AsUTF8(stmt), SQL_NTS);
+        rc = SQLPrepare(c->hstmt, PyUnicode_AsUTF8(c->stmt), SQL_NTS);
         Py_END_ALLOW_THREADS
         if (rc != SQL_SUCCESS)
             return f_error(SQL_HANDLE_STMT, c->hstmt);
@@ -1008,7 +1027,7 @@ cur_executemany(PyObject *self, PyObject *args)
     res = PyTuple_New(size);
     for (i = 0; i < size; i++) {
         p = Py_BuildValue("UN", stmt, PySequence_GetItem(params, i));
-        v = cur_execute(self, p);
+        v = cur_execute(self, p, NULL);
         Py_XDECREF(p);
         if (v == NULL)
             return NULL;
@@ -1078,7 +1097,7 @@ cursor_next(PyObject *self)
 {
     PyObject *row;
     CursorObject *c = (CursorObject *)self;
-    if (c->forupdate == 1) {
+    if (c->curtype == 2) {
         row = cur_fetchone(self);
         if (row == Py_None) {
             PyErr_SetObject(PyExc_StopIteration, Py_None);
@@ -1419,7 +1438,7 @@ row_dealloc(PyObject *self)
 }
 
 static PyMethodDef connection_methods[] = {
-    {"cursor", (PyCFunction)con_cursor, METH_NOARGS, con_cursor_doc},
+    {"cursor", (PyCFunction)con_cursor, METH_VARARGS, con_cursor_doc},
     {"commit", (PyCFunction)con_commit, METH_NOARGS, con_commit_doc},
     {"rollback", (PyCFunction)con_rollback, METH_NOARGS, con_rollback_doc},
     {"close", (PyCFunction)con_close, METH_NOARGS, con_close_doc},
@@ -1428,7 +1447,7 @@ static PyMethodDef connection_methods[] = {
 
 PyTypeObject Connection_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "Connection",
+    .tp_name = "_db2.Connection",
     .tp_doc = connection_doc,
     .tp_basicsize = sizeof(ConnectionObject),
     .tp_itemsize = 0,
@@ -1451,7 +1470,7 @@ cursordesc_dealloc(PyObject *self)
 
 PyTypeObject Cursordesc_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "Cursordesc",
+    .tp_name = "_db2.Cursordesc",
     .tp_basicsize = sizeof(CursordescObject),
     .tp_itemsize = 0,
     .tp_dealloc = (destructor)cursordesc_dealloc,
@@ -1459,7 +1478,7 @@ PyTypeObject Cursordesc_Type = {
 };
 
 static PyMethodDef cursor_methods[] = {
-    {"execute", (PyCFunction)cur_execute, METH_VARARGS, cur_execute_doc},
+    {"execute", (PyCFunction)cur_execute, METH_VARARGS | METH_KEYWORDS, cur_execute_doc},
     {"executemany", (PyCFunction)cur_executemany, METH_VARARGS, cur_executemany_doc},
     {"fetchone", (PyCFunction)cur_fetchone, METH_NOARGS, cur_fetchone_doc},
     {"fetchmany", (PyCFunction)cur_fetchmany, METH_VARARGS, cur_fetchmany_doc},
@@ -1479,6 +1498,8 @@ static PyMemberDef cursor_members[] = {
      "Connection object"},
     {"name", T_OBJECT, offsetof(CursorObject, name), READONLY,
      "Name of cursor"},
+    {"stmt", T_OBJECT, offsetof(CursorObject, stmt), READONLY,
+     "Current statement"},
     {"arraysize", T_INT, offsetof(CursorObject, arraysize), 0,
      "Default number of rows to fetch."},
     {"rowcount", T_INT, offsetof(CursorObject, rowcount), READONLY,
@@ -1488,7 +1509,7 @@ static PyMemberDef cursor_members[] = {
 
 PyTypeObject Cursor_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "Cursor",
+    .tp_name = "_db2.Cursor",
     .tp_doc = "Cursor object",
     .tp_basicsize = sizeof(CursorObject),
     .tp_itemsize = 0,
@@ -1530,7 +1551,7 @@ static PyMappingMethods row_as_mapping = {
 
 PyTypeObject Row_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "Row",
+    .tp_name = "_db2.Row",
     .tp_doc = "Row object",
     .tp_basicsize = sizeof(RowObject),
     .tp_itemsize = 1,
